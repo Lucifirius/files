@@ -1,0 +1,22 @@
+#!/bin/bash
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <video_url> [output_directory]"
+    echo "Example: $0 https://www.youtube.com/watch?v=VIDEO_ID"
+    echo "Example: $0 https://www.youtube.com/watch?v=VIDEO_ID ~/Downloads"
+    exit 1
+fi
+URL="$1"
+OUTPUT_DIR="${2:-.}"
+mkdir -p "$OUTPUT_DIR"
+yt-dlp \
+    --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+    --merge-output-format mp4 \
+    --output "$OUTPUT_DIR/%(title)s.%(ext)s" \
+    --embed-thumbnail \
+    --embed-metadata \
+    --embed-subs \
+    --sub-langs "en.*" \
+    --convert-subs srt \
+    --no-playlist \
+    "$URL"
+echo "Download complete!"
