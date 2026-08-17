@@ -1,15 +1,28 @@
 #!/bin/bash
+
+# yt-dlp Best Quality Download Script
+# Downloads the best quality video in MP4 format (most compatible) 
+
+# Check if URL is provided
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <video_url> [output_directory]"
     echo "Example: $0 https://www.youtube.com/watch?v=VIDEO_ID"
     echo "Example: $0 https://www.youtube.com/watch?v=VIDEO_ID ~/Downloads"
     exit 1
 fi
+
 URL="$1"
-OUTPUT_DIR="${2:-.}"
+OUTPUT_DIR="${2:-.}"  # Use provided directory or current directory
+
+# Create output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"
+
+# Capture the final downloaded filepath while still showing live progress
+LOGFILE=$(mktemp)
+
+# Download with best quality settings
 yt-dlp \
-    --format "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
+    --format "bestvideo[vcodec^=avc1][ext=mp4]+bestaudio[acodec^=mp4a][ext=m4a]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" \
     --merge-output-format mp4 \
     --output "$OUTPUT_DIR/%(title)s.%(ext)s" \
     --embed-thumbnail \
@@ -18,5 +31,38 @@ yt-dlp \
     --sub-langs "en.*" \
     --convert-subs srt \
     --no-playlist \
-    "$URL"
+    --print after_move:filepath \
+    "$URL" | tee "$LOGFILE"
+
+DOWNLOADED_FILE=$(tail -n 1 "$LOGFILE")
+rm -f "$LOGFILE"
+
 echo "Download complete!"
+
+# Create an optimized copy in the background using the same command/parameters as optimize
+if [ -f "$DOWNLOADED_FILE" ]; then
+    OPTIMIZED_FILE="${DOWNLOADED_FILE%.*}.optimized.mp4"
+    OPT_LOG="${DOWNLOADED_FILE%.*}.optimize.log"
+
+    echo "Optimizing in background -> $OPTIMIZED_FILE"
+    echo "  (progress/log: $OPT_LOG)"
+
+    nohup ffmpeg -i "$DOWNLOADED_FILE" \
+        -c:v libx264 \
+        -profile:v high \
+        -level 4.0 \
+        -pix_fmt yuv420p \
+        -crf 23 \
+        -preset slow \
+        -vf scale=-2:720 \
+        -r 24 \
+        -c:a aac \
+        -b:a 96k \
+        -movflags +faststart \
+        "$OPTIMIZED_FILE" > "$OPT_LOG" 2>&1 &
+    disown
+
+    echo "Optimization started in background (PID $!)."
+else
+    echo "Warning: could not locate downloaded file, skipping optimization."
+fi
